@@ -1,5 +1,6 @@
 import os
 import warnings
+import zipfile
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -32,15 +33,16 @@ sns.set_palette("husl")
 # ============================================
 @st.cache_data
 def load_data():
-    # Make sure this CSV file is in the same folder as this .py file
-    df = pd.read_csv('CLEANED_FOOD_DELIVERY_DATA.csv')
+    with zipfile.ZipFile('CLEANED_FOOD_DELIVERY_DATA.zip') as z:
+        with z.open('CLEANED_FOOD_DELIVERY_DATA.csv') as f:
+            df = pd.read_csv(f)
     df['Order_Date'] = pd.to_datetime(df['Order_Date'], errors='coerce')
     return df
 
 try:
     df = load_data()
 except FileNotFoundError:
-    st.error("⚠️ 'CLEANED_FOOD_DELIVERY_DATA.csv' not found. Please ensure the cleaned dataset is in the same folder as this script.")
+    st.error("⚠️ 'CLEANED_FOOD_DELIVERY_DATA.zip' not found. Please ensure the dataset zip file is in the repository.")
     st.stop()
 
 # ============================================
