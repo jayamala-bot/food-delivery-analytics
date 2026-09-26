@@ -34,7 +34,7 @@ sns.set_palette("husl")
 # ============================================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("CLEANED_FOOD_DELIVERY_DATA.csv")
+    df = pd.read_csv(r"D:\New folder (2)\.vscode\Online_FoodDelivery\CLEANED_FOOD_DELIVERY_DATA.zip")
     df["Order_Date"] = pd.to_datetime(df["Order_Date"], errors="coerce")
     return df
 
