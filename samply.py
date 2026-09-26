@@ -7,12 +7,15 @@ import plotly.express as px
 import seaborn as sns
 import streamlit as st
 
-warnings.filterwarnings("ignore")
+# Handle SSL certificates safely across environments
+try:
+    import certifi
+    os.environ["SSL_CERT_FILE"] = certifi.where()
+    os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+except ImportError:
+    pass  # Uses system default certificates if certifi is not installed
 
-# Define SSL CA Certificate Path
-CA_PATH = "isrgrootx1.pem"
-os.environ["SSL_CERT_FILE"] = CA_PATH
-os.environ["REQUESTS_CA_BUNDLE"] = CA_PATH
+warnings.filterwarnings("ignore")
 
 # Set page config
 st.set_page_config(
@@ -23,37 +26,39 @@ st.set_page_config(
 )
 
 # Set style
-plt.style.use('seaborn-v0_8-darkgrid')
+plt.style.use("seaborn-v0_8-darkgrid")
 sns.set_palette("husl")
 
 # ============================================
 # LOAD DATA
 # ============================================
 @st.cache_data
-def load_data() -> pd.DataFrame:
-    df = pd.read_csv('CLEANED_FOOD_DELIVERY_DATA.csv')
-    df['Order_Date'] = pd.to_datetime(df['Order_Date'], errors='coerce')
+def load_data():
+    df = pd.read_csv("CLEANED_FOOD_DELIVERY_DATA.csv")
+    df["Order_Date"] = pd.to_datetime(df["Order_Date"], errors="coerce")
     return df
 
 try:
     df = load_data()
 except FileNotFoundError:
-    st.error("⚠️ 'CLEANED_FOOD_DELIVERY_DATA.csv' not found. Please ensure the cleaned dataset is in the same folder as this script.")
+    st.error("⚠️ 'CLEANED_FOOD_DELIVERY_DATA.csv' not found. Please ensure the dataset is in the same folder as this script.")
     st.stop()
 
 # Helper function to display reusable data table section
-def display_table_view(table_df: pd.DataFrame, title: str = "📄 Detailed Data Table", filename: str = "data_export.csv") -> None:
+def display_table_view(table_df, title="📄 Detailed Data Table", filename="data_export.csv"):
     st.markdown("---")
     st.subheader(title)
     
+    records_count = int(table_df.shape[0])
+    
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.caption(f"Showing **{len(table_df):,}** records")
+        st.caption(f"Showing **{records_count:,}** records")
     with col2:
-        csv = table_df.to_csv(index=False).encode('utf-8')
+        csv_data = table_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Export Table CSV",
-            data=csv,
+            data=csv_data,
             file_name=filename,
             mime="text/csv",
             use_container_width=True
@@ -81,18 +86,13 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("""
+st.sidebar.info(f"""
 ### 📋 Dataset Info
-- **Total Orders**: {:,}
-- **Total Customers**: {:,}
-- **Total Restaurants**: {:,}
-- **Delivery Partners**: {:,}
-""".format(
-    df['Order_ID'].nunique(),
-    df['Customer_ID'].nunique(),
-    df['Restaurant_ID'].nunique(),
-    df['Delivery_Partner_ID'].nunique()
-))
+- **Total Orders**: {df['Order_ID'].nunique():,}
+- **Total Customers**: {df['Customer_ID'].nunique():,}
+- **Total Restaurants**: {df['Restaurant_ID'].nunique():,}
+- **Delivery Partners**: {df['Delivery_Partner_ID'].nunique():,}
+""")
 
 # ============================================
 # PAGE 1: DASHBOARD OVERVIEW
@@ -103,7 +103,7 @@ if page == "📊 Dashboard Overview":
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Orders", f"{len(df):,}", delta="100%", delta_color="off")
+        st.metric("Total Orders", f"{df.shape[0]:,}", delta="100%", delta_color="off")
     with col2:
         st.metric("Avg Order Value", f"₹{df['Order_Value'].mean():.0f}", delta=f"Median: ₹{df['Order_Value'].median():.0f}", delta_color="off")
     with col3:
@@ -232,7 +232,7 @@ elif page == "📅 Weekend vs Weekday":
     
     with col4:
         st.subheader("Cancellation Rate")
-        cancel_day = df.groupby('Order_Day').apply(lambda x: (x['Order_Status'] == 'Cancelled').mean() * 100)
+        cancel_day = df.groupby('Order_Day')['Order_Status'].apply(lambda s: (s == 'Cancelled').mean() * 100)
         fig = px.bar(cancel_day, x=cancel_day.index, y=cancel_day.values, labels={'x': 'Day', 'y': 'Cancel Rate (%)'}, color=cancel_day.values, color_continuous_scale='Oranges')
         st.plotly_chart(fig, use_container_width=True)
 
@@ -254,18 +254,19 @@ elif page == "🚗 Distance & Delivery":
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Distance vs Delivery Time (Scatter)")
-        sample_df = df.sample(min(2000, len(df)), random_state=42)
+        sample_size = min(2000, df.shape[0])
+        sample_df = df.sample(sample_size, random_state=42)
         fig = px.scatter(sample_df, x='Distance_km', y='Delivery_Time_Min', opacity=0.5, title="Distance vs Delivery Time")
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         st.subheader("Delivery Time by Distance Range")
         df['Distance_Bin'] = pd.cut(df['Distance_km'], bins=[0, 5, 10, 15, 20, 30, 40], labels=['0-5km', '5-10km', '10-15km', '15-20km', '20-30km', '30-40km'])
-        dist_delivery = df.groupby('Distance_Bin')['Delivery_Time_Min'].mean()
+        dist_delivery = df.groupby('Distance_Bin', observed=False)['Delivery_Time_Min'].mean()
         fig = px.bar(dist_delivery, x=dist_delivery.index, y=dist_delivery.values, labels={'x': 'Distance Range', 'y': 'Avg Delivery (min)'}, color=dist_delivery.values, color_continuous_scale='Blues')
         st.plotly_chart(fig, use_container_width=True)
 
-    dist_table = df.groupby('Distance_Bin').agg(
+    dist_table = df.groupby('Distance_Bin', observed=False).agg(
         Total_Orders=('Order_ID', 'count'),
         Avg_Delivery_Time_Min=('Delivery_Time_Min', 'mean'),
         Avg_Delivery_Rating=('Delivery_Rating', 'mean')
@@ -307,7 +308,8 @@ elif page == "📉 Correlations":
     st.markdown("---")
     
     numeric_cols = ['Customer_Age', 'Delivery_Time_Min', 'Distance_km', 'Order_Value', 'Discount_Applied', 'Final_Amount', 'Delivery_Rating', 'Restaurant_Rating', 'Peak_Hour', 'Profit_Margin']
-    corr_matrix = df[numeric_cols].corr()
+    valid_numeric_cols = [col for col in numeric_cols if col in df.columns]
+    corr_matrix = df[valid_numeric_cols].corr()
     
     st.subheader("Correlation Heatmap")
     fig = px.imshow(corr_matrix, labels=dict(color="Correlation"), color_continuous_scale="RdYlGn", zmin=-1, zmax=1, text_auto=True)
@@ -327,7 +329,7 @@ elif page == "💡 Business Insights":
     with col1:
         st.subheader("🎯 Key Findings")
         st.write(f"""
-        1. **Order Volume**: {len(df):,} total orders processed
+        1. **Order Volume**: {df.shape[0]:,} total orders processed
         2. **Average Order Value**: ₹{df['Order_Value'].mean():.0f}
         3. **Cancellation Rate**: {(df['Order_Status']=='Cancelled').mean()*100:.1f}%
         4. **Top City**: {df['City'].value_counts().index[0]} with {df['City'].value_counts().values[0]:,} orders
@@ -450,7 +452,7 @@ elif page == "🛢️ SQL Queries":
             
             col_info, col_toggle, col_btn = st.columns([2, 1, 1])
             with col_info:
-                st.caption(f"Returned **{len(res_df):,}** rows")
+                st.caption(f"Returned **{res_df.shape[0]:,}** rows")
             with col_toggle:
                 view_type = st.radio(
                     "View As:",
@@ -459,10 +461,10 @@ elif page == "🛢️ SQL Queries":
                     horizontal=True
                 )
             with col_btn:
-                csv = res_df.to_csv(index=False).encode('utf-8')
+                csv_data = res_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     label="📥 Export CSV",
-                    data=csv,
+                    data=csv_data,
                     file_name=query_info["filename"],
                     mime="text/csv",
                     key=f"dl_{query_info['filename']}",
@@ -502,7 +504,7 @@ elif page == "🛢️ SQL Queries":
     if st.button("🚀 Run Custom Query", use_container_width=True):
         try:
             custom_res = pd.read_sql_query(custom_query, conn)
-            st.success(f"Execution Successful! ({len(custom_res)} rows returned)")
+            st.success(f"Execution Successful! ({custom_res.shape[0]} rows returned)")
             display_table_view(custom_res, title="📋 Custom Query Results Table", filename="custom_query_results.csv")
-        except (sqlite3.Error, pd.errors.DatabaseError) as err:
+        except Exception as err:
             st.error(f"❌ SQL Execution Error: {err}")
