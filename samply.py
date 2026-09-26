@@ -41,7 +41,7 @@ def load_data():
 try:
     df = load_data()
 except FileNotFoundError:
-    st.error("⚠️ 'CLEANED_FOOD_DELIVERY_DATA.csv' not found. Please ensure the dataset is in the same folder as this script.")
+    st.error("⚠️ 'CLEANED_FOOD_DELIVERY_DATA.zip' not found. Please ensure the dataset is in the same folder as this script.")
     st.stop()
 
 # Helper function to display reusable data table section
